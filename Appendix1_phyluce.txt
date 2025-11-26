@@ -1,0 +1,99 @@
+#######################
+## ʻElepaio UCE loci ##
+#######################
+
+phyluce_assembly_assemblo_spades \
+	--config assembly.conf \
+	--output spades-assemblies/ \
+	--cores 30
+
+phyluce_assembly_match_contigs_to_probes \
+	--contigs spades-assemblies/contigs \
+	--probes uce-5k-probes.fasta \
+	--output uce-search-results
+
+phyluce_assembly_get_match_counts \
+	--locus-db uce-search-results/probe.matches.sqlite \
+	--taxon-list-config taxon-set.conf \
+	--taxon-group 'all' \
+	--output taxon-sets/all/all-taxa.conf
+
+phyluce_assembly_get_fastas_from_match_counts \
+	--contigs ../../spades-assemblies/contigs \
+	--locus-db ../../uce-search-results/probe.matches.sqlite \
+	--match-count-output good-taxa-incomplete.conf \
+	--output good-taxa-incomplete.fasta \
+	--incomplete-matrix good-taxa-incomplete.incomplete \
+	--log-path log
+
+phyluce_align_seqcap_align \
+	--input good-taxa-incomplete.fasta \
+	--output mafft-nexus-edge-trimmed \
+	--output-format nexus \
+	--taxa 26 \
+	--aligner mafft \
+	--cores 16 \
+	--incomplete-matrix \
+	--log-path log
+	
+phyluce_align_remove_locus_name_from_files \
+	--alignments mafft-nexus-edge-trimmed \
+	--output incomplete_mafft_nexus_clean \
+	--cores 16 \
+	--log-path log \
+	--input-format nexus \
+	--output-format nexus
+
+phyluce_align_get_only_loci_with_min_taxa \
+	--alignments incomplete_mafft_nexus_clean \
+	--taxa 26 \
+	--percent 1.0 \
+	--output 100perc_nexus \
+	--cores 16 \
+	--log-path log
+	
+	# Complete matrix = 4322 (of 4867 possible) aligned loci
+
+################################
+## Assembling Monarch Dataset ##
+################################
+
+awk 1 *.fasta > monarch_paradise.fasta
+
+phyluce_align_seqcap_align \
+	--input monarch_paradise.fasta \
+	--output mafft-nexus-internal-trimmed \
+	--output-format fasta \
+	--taxa 10 \
+	--aligner mafft \
+	--cores 8 \
+	--incomplete-matrix \
+	--log-path log \
+	--no-trim
+
+phyluce_align_get_gblocks_trimmed_alignments_from_untrimmed \
+	--alignments mafft-nexus-internal-trimmed \
+	--output mafft-nexus-internal-trimmed-gblocks \
+	--cores 8 \
+	--log log
+	
+phyluce_align_get_align_summary_data \
+	--alignments mafft-nexus-internal-trimmed-gblocks \
+	--cores 8 \
+	--log-path log
+	
+phyluce_align_remove_locus_name_from_files \
+	--alignments mafft-nexus-internal-trimmed-gblocks \
+	--output mafft-nexus-internal-trimmed-gblocks-clean \
+	--cores 8 \
+	--log-path log
+	
+phyluce_align_get_only_loci_with_min_taxa \
+	--alignments mafft-nexus-internal-trimmed-gblocks-clean \
+	--taxa 10 \
+	--percent 1.0 \
+	--output mafft-nexus-internal-trimmed-gblocks-clean-100p \
+	--cores 8 \
+	--log-path log
+
+	# Complete matrix = 2756 (of 4958 possible) aligned loci
