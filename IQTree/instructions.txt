@@ -1,0 +1,9 @@
+# The first step is partitioning all the UCE loci into left, right, and center partitions, following Tagliacollo & Lanfear (2018) - see also: https://github.com/Tagliacollo/PartitionUCE. For this example, just use the analysis.py command found in this repo.
+
+# After splitting up the UCEs into partitions, estimate the species tree like this:
+iqtree2 -s gblocks-concat-100p-phylip.phylip \
+-p paradise-monarch_entropy_partition.nex \
+-T 9 -B 1000 \
+-m TEST \
+-mset mrbayes \
+--prefix multi_models
