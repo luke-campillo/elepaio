@@ -1,0 +1,19 @@
+#NEXUS
+Begin data;
+Dimensions ntax=10 nchar=6;
+Format datatype=Standard missing=? gap=- labels="01";
+Matrix
+                                        [RKOMHZ]
+	kauai_elepaio                        010000
+	oahu_elepaio                         001000
+	hawaii_elepaio                       000010
+	monarcha_takatsukasae                000001
+	hypothymis_azurea                    000001
+	myiagra_ruficollis                   000001
+	paradisaea_minor                     000001
+	phonygammus_keraudrenii              000001
+	symposiachrus_guttula                000001
+	symposiachrus_trivirgatus            000001
+	;
+End;
+

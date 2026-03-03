@@ -1,0 +1,409 @@
+# filenames
+
+range_fn = "data/monarch.range.nex"
+tree_fn  = "data/rooted_elep.tre"
+geo_fn   = "data/hawaii"
+times_fn = geo_fn + ".times.txt"
+dist_fn  = geo_fn + ".distances.txt"
+out_fn   = "output/epoch_TreeEst_dataset_1"
+
+# read in the UCE data
+filenames <- v("loci/dataset_1/uce_1193nexus_core.fas",
+"loci/dataset_1/uce_1306nexus_right.fas",
+"loci/dataset_1/uce_131nexus_right.fas",
+"loci/dataset_1/uce_1706nexus_core.fas",
+"loci/dataset_1/uce_1819nexus_core.fas",
+"loci/dataset_1/uce_1906nexus_right.fas",
+"loci/dataset_1/uce_1933nexus_right.fas",
+"loci/dataset_1/uce_2131nexus_core.fas",
+"loci/dataset_1/uce_2235nexus_core.fas",
+"loci/dataset_1/uce_235nexus_left.fas",
+"loci/dataset_1/uce_2538nexus_left.fas",
+"loci/dataset_1/uce_2755nexus_core.fas",
+"loci/dataset_1/uce_2828nexus_right.fas",
+"loci/dataset_1/uce_2959nexus_left.fas",
+"loci/dataset_1/uce_2971nexus_core.fas",
+"loci/dataset_1/uce_3161nexus_left.fas",
+"loci/dataset_1/uce_3193nexus_core.fas",
+"loci/dataset_1/uce_3659nexus_core.fas",
+"loci/dataset_1/uce_372nexus_right.fas",
+"loci/dataset_1/uce_3831nexus_right.fas",
+"loci/dataset_1/uce_3905nexus_left.fas",
+"loci/dataset_1/uce_3912nexus_left.fas",
+"loci/dataset_1/uce_4159nexus_core.fas",
+"loci/dataset_1/uce_4183nexus_right.fas",
+"loci/dataset_1/uce_4658nexus_core.fas",
+"loci/dataset_1/uce_4719nexus_core.fas",
+"loci/dataset_1/uce_4928nexus_right.fas",
+"loci/dataset_1/uce_5076nexus_right.fas",
+"loci/dataset_1/uce_5084nexus_left.fas",
+"loci/dataset_1/uce_5269nexus_core.fas",
+"loci/dataset_1/uce_5345nexus_core.fas",
+"loci/dataset_1/uce_5429nexus_left.fas",
+"loci/dataset_1/uce_5494nexus_right.fas",
+"loci/dataset_1/uce_5773nexus_right.fas",
+"loci/dataset_1/uce_5899nexus_core.fas",
+"loci/dataset_1/uce_6106nexus_core.fas",
+"loci/dataset_1/uce_6210nexus_right.fas",
+"loci/dataset_1/uce_6426nexus_core.fas",
+"loci/dataset_1/uce_6457nexus_core.fas",
+"loci/dataset_1/uce_6752nexus_right.fas",
+"loci/dataset_1/uce_7081nexus_right.fas",
+"loci/dataset_1/uce_720nexus_left.fas",
+"loci/dataset_1/uce_7324nexus_right.fas",
+"loci/dataset_1/uce_7361nexus_core.fas",
+"loci/dataset_1/uce_7642nexus_left.fas",
+"loci/dataset_1/uce_7658nexus_core.fas",
+"loci/dataset_1/uce_7682nexus_right.fas",
+"loci/dataset_1/uce_7787nexus_core.fas",
+"loci/dataset_1/uce_7904nexus_core.fas",
+"loci/dataset_1/uce_810nexus_core.fas")
+
+n_data_subsets <- filenames.size()
+for (i in 1:n_data_subsets) {
+    data[i] = readDiscreteCharacterData(filenames[i])
+}
+
+########
+# data #
+########
+
+# read binary (01) presence-absence range data
+dat_range_01 = readDiscreteCharacterData(range_fn)
+n_areas <- dat_range_01.nchar()
+
+# determine the number of states
+max_areas <- 2
+n_states <- 0
+for (k in 0:max_areas) n_states += choose(n_areas, k)
+
+# convert binary ranges into NaturalNumbers
+dat_range_n = formatDiscreteCharacterData(dat_range_01, "DEC", n_states)
+
+# epoch times
+time_bounds <- readDataDelimitedFile(file=times_fn, delimiter=" ")
+n_epochs <- time_bounds.size()
+
+# epoch connectivity
+for (i in 1:n_epochs) {
+    epoch_fn = geo_fn + ".connectivity." + i + ".txt"
+    connectivity[i] <- readDataDelimitedFile(file=epoch_fn, delimiter=" ")
+}
+
+# area distances
+distances <- readDataDelimitedFile(file=dist_fn, delimiter=" ")
+
+# tree
+phy_init = readTrees(tree_fn)[1]
+
+# taxa
+taxa = phy_init.taxa()
+n_taxa = taxa.size()
+n_branches = 2 * n_taxa - 2
+
+# get the converted state descriptions
+state_desc = dat_range_n.getStateDescriptions()
+
+# write the state descriptions to file
+state_desc_str = "state,range\n"
+for (i in 1:state_desc.size())
+{
+    state_desc_str += (i-1) + "," + state_desc[i] + "\n"
+}
+write(state_desc_str, file=out_fn+".state_labels.txt")
+
+# create moves and monitors
+moves = VectorMoves()
+monitors = VectorMonitors()
+#####################
+# Clade constraints #
+#####################
+#
+# outgroup taxa:
+outgroup_taxa = [
+    "paradisaea_minor",
+    "phonygammus_keraudrenii"
+]
+
+k = 1
+
+for (i in 1:taxa.size()) {
+    taxon_name = taxa[i].getSpeciesName()
+    if ( !outgroup_taxa.contains( taxon_name ) ) {
+        ingroup_taxa[k] = taxon_name
+        k += 1
+    }
+}
+
+#Monarcha constraint: 
+constraints[1] = clade( ingroup_taxa )
+
+#Paradise constraint:
+constraints[2] = clade("paradisaea_minor","phonygammus_keraudrenii")
+
+# We will use these for calibration 
+###############
+# Tree models #
+###############
+
+# root age
+root_age ~ dnUniform(14.7, 28.3)
+moves.append( mvScale(root_age, weight=5) )
+
+# proportion of sampled tips
+rho <- 0.0808
+
+# birth rate
+birth ~ dnExp(10)
+moves.append( mvScale(birth, weight=2) )
+
+# death rate
+death ~ dnExp(10)
+moves.append( mvScale(death, weight=2) )
+
+# birth-death process
+tree_bd = dnBDP(lambda=birth, mu=death, rho=rho, rootAge=root_age, taxa=taxa)
+tree ~ dnConstrainedTopology(tree_bd, constraints)
+
+# provide a starting tree (not essential)
+tree.setValue(phy_init)
+#root_age.setValue(phy_init.rootAge())
+
+# tree moves
+moves.append( mvNNI(tree, weight=n_branches/2) )
+moves.append( mvFNPR(tree, weight=n_branches/8) )
+moves.append( mvNodeTimeSlideUniform(tree, weight=n_branches/2) ) 
+moves.append( mvSubtreeScale(tree, weight=n_branches/8) )
+moves.append( mvTreeScale(tree, root_age, weight=n_branches/8) )
+
+################
+# Calibrations #
+################
+
+age_monarcha := tmrca(tree, constraints[1])
+min_age_monarcha <- 6.2
+max_age_monarcha <- 15.23
+width_age_prior_monarcha <- (max_age_monarcha - min_age_monarcha)/2.0
+mean_age_prior_monarcha <- min_age_monarcha + width_age_prior_monarcha
+obs_age_monarcha ~ dnNormal(age_monarcha, width_age_prior_monarcha)
+obs_age_monarcha.clamp( mean_age_prior_monarcha )
+moves.append( mvScale(obs_age_monarcha, weight = 5) )
+
+
+age_paradise := tmrca(tree, constraints[2])
+min_age_paradise <- 8.9
+max_age_paradise <- 24.4
+width_age_prior_paradise <- (max_age_paradise - min_age_paradise)/2.0
+mean_age_prior_paradise <- min_age_paradise + width_age_prior_paradise
+obs_age_paradise ~ dnNormal(age_paradise, width_age_prior_paradise)
+obs_age_paradise.clamp( mean_age_prior_paradise )
+moves.append( mvScale(obs_age_paradise, weight = 5) )
+
+###################
+# Molecular model #
+###################
+
+# molecular clock
+rate_mol ~ dnLognormal(1e-6, 1e0)
+rate_mol.setValue(1e-2)
+moves.append( mvScale(rate_mol, lambda=0.2, weight=4) )
+moves.append( mvScale(rate_mol, lambda=1.0, weight=2) )
+
+# relaxed clock
+branch_sd <- 1.0
+branch_mean <- 0 - 0.5*branch_sd^2
+for (i in 1:n_branches) {
+    branch_rate_multiplier[i] ~ dnLognormal(mean=branch_mean, sd=branch_sd)
+    branch_rates[i] := rate_mol * branch_rate_multiplier[i]
+    moves.append( mvScale(branch_rate_multiplier[i]) )
+}
+moves.append( mvVectorScale(branch_rate_multiplier, weight=3) )
+
+##################################
+#      Substitution Model        #
+#   Loop over each data subset   #
+##################################
+
+for (i in 1:n_data_subsets) {
+
+    # exchangeability rates for partition i
+    exr_prior[i] <- v(1,1,1,1,1,1)
+    exr[i] ~ dnDirichlet(exr_prior[i])
+    moves.append( mvSimplexElementScale(exr[i], alpha=10, tune=true, weight=3) )
+
+    # stationary frequencies for partition i
+    pi_prior[i] <- v(1,1,1,1)
+    pi[i] ~ dnDirichlet(pi_prior[i])
+    moves.append( mvSimplexElementScale(pi[i], alpha=10, tune=true, weight=2) )
+
+    # rate matrix for partition i
+    Q[i] := fnGTR(exr[i],pi[i]) 
+  
+    # +Gamma for partition i
+    alpha[i] ~ dnUniform(0, 1E8)
+    gamma_rates[i] := fnDiscretizeGamma( alpha[i], alpha[i], 4, false )
+
+    # add moves for the alpha parameter
+    moves.append( mvScale(alpha[i],weight=2) )
+
+    # the probability of a site being invariable
+    pinvar[i] ~ dnBeta(1,1)
+    moves.append( mvBetaProbability(pinvar[i], delta=10, tune=true, weight=2.0) )
+}
+
+####################
+# PhyloCTMC Model #
+###################
+
+for (i in 1:n_data_subsets) {
+    phyloSeq[i] ~ dnPhyloCTMC(tree=tree, Q=Q[i], branchRates=branch_rates, siteRates=gamma_rates[i], pInv=pinvar[i], type="DNA")
+    phyloSeq[i].clamp(data[i])
+}
+
+#######################
+# Biogeography models #
+#######################
+
+# anagenetic event rate scaler
+rate_bg ~ dnLoguniform(1e-4, 1e2)
+rate_bg.setValue(1e-2)
+moves.append( mvScale(rate_bg, lambda=0.2, weight=4) )
+moves.append( mvScale(rate_bg, lambda=1.0, weight=2) )
+
+# fix relative dispersal rate to 1
+dispersal_rate <- 1.0
+
+# geographic distance scaler
+distance_scale ~ dnUnif(0,20)
+distance_scale.setValue(0.001)
+moves.append( mvScale(distance_scale, weight=3) )
+
+# then, the dispersal rate matrix
+for (i in 1:n_epochs) {
+    for (j in 1:n_areas) {
+        for (k in 1:n_areas) {
+            dr[i][j][k] <- 0.0
+            if (connectivity[i][j][k] > 0) {
+                dr[i][j][k] := dispersal_rate * exp(-distance_scale * distances[j][k])
+            }
+        }
+    }
+}
+
+# then relative extirpation rates (or per-area extinction rates)
+log_sd <- 0.5
+log_mean <- ln(1) - 0.5*log_sd^2
+extirpation_rate ~ dnLognormal(mean=log_mean, sd=log_sd)
+moves.append( mvScale(extirpation_rate, weight=2) )
+
+# the extirpation rate matrix
+for (i in 1:n_epochs) {
+    for (j in 1:n_areas) {
+        for (k in 1:n_areas) {
+            er[i][j][k] <- 0.0
+        }
+        er[i][j][j] := extirpation_rate
+    }
+}
+
+# build DEC rate matrices
+for (i in 1:n_epochs) {
+    Q_DEC[i] := fnDECRateMatrix(dispersalRates=dr[i],
+                                extirpationRates=er[i],
+                                maxRangeSize=max_areas)
+}
+
+# build the epoch times
+for (i in 1:n_epochs) {
+    time_max[i] <- time_bounds[i][1]
+    time_min[i] <- time_bounds[i][2]
+
+    if (i == n_epochs) {
+        epoch_times[i] <- 0.0
+    } else {
+        epoch_times[i] ~ dnUniform(time_min[i], time_max[i])
+        epoch_width <- time_bounds[i][1] - time_bounds[i][2]
+        moves.append( mvSlide(epoch_times[i], delta=epoch_width/2) )
+    }
+}
+
+# combine the epoch rate matrices and times
+Q_DEC_epoch := fnEpoch(Q=Q_DEC, times=epoch_times, rates=rep(1, n_epochs))
+
+# build clado probs
+clado_event_types <- [ "s", "a" ]
+p_sympatry ~ dnUniform(0,1)
+p_allopatry := abs(1.0 - p_sympatry)
+moves.append( mvSlide(p_sympatry, delta=0.1, weight=2) )
+clado_event_probs := simplex(p_sympatry, p_allopatry)
+P_DEC := fnDECCladoProbs(eventProbs=clado_event_probs,
+                         eventTypes=clado_event_types,
+                         numCharacters=n_areas,
+                         maxRangeSize=max_areas)
+
+# root frequencies
+rf_DEC_raw <- rep(0, n_states)
+rf_DEC_raw[n_areas+1] <- 1  # Mainland (Z) is the only possible starting state
+rf_DEC <- simplex(rf_DEC_raw)
+
+# the phylogenetic CTMC with cladogenetic events
+m_bg ~ dnPhyloCTMCClado(tree=tree,
+                           Q=Q_DEC_epoch,
+                           cladoProbs=P_DEC,
+                           branchRates=rate_bg,
+                           rootFrequencies=rf_DEC,
+                           type="NaturalNumbers",
+                           nSites=1)
+
+# attach the range data
+m_bg.clamp(dat_range_n)
+
+############
+# Monitors #
+############
+
+# monitor the age of the ingroup
+ingroup_clade <- clade("hawaii_elepaio",
+                       "oahu_elepaio",
+                       "kauai_elepaio")
+
+ingroup_age := tmrca(tree, ingroup_clade)
+for (i in 1:n_epochs) {
+    ingroup_older_island[i] := ifelse(ingroup_age > epoch_times[i], 1, 0)
+}
+
+# print to screen
+monitors.append( mnScreen(printgen=100, dispersal_rate, distance_scale, ingroup_age) )
+# monitor parameters
+monitors.append( mnModel(file=out_fn+".model.log", printgen=100) )
+# monitor tree
+monitors.append( mnFile(tree, filename="epoch_TreeEst_dataset_1.trees", printgen=100) )
+# monitor ancestral states
+monitors.append( mnJointConditionalAncestralState(tree=tree,
+                                                  ctmc=m_bg,
+                                                  type="NaturalNumbers",
+                                                  withTips=true,
+                                                  withStartStates=true,
+                                                  filename=out_fn+".states.log",
+                                                  printgen=100) )
+# monitor stochastic mappings
+monitors.append( mnStochasticCharacterMap(ctmc=m_bg,
+                                          filename=out_fn+".stoch.log",
+                                          printgen=100) )
+
+############
+# Analysis #
+############
+
+# build the model analysis object from the model graph
+mymodel = model(m_bg, ingroup_older_island)
+
+n_gen = 25000
+
+# create the MCMC analysis object
+runit = mcmc(mymodel, monitors, moves, nruns=3, combine="mixed")
+runit.burnin(generations=2500, tuningInterval=75)
+runit.run(n_gen)
+
+# exit
+quit()
